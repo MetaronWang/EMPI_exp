@@ -1,7 +1,5 @@
-import os
-import pickle
-from pathlib import Path
-
+import shutil
+import torch.cuda
 import yaml
 from torch import optim
 from torch.utils.data import DataLoader
@@ -13,21 +11,20 @@ from src.surrogate import SurrogateVAE, ZeroOneProblemData
 from src.types_ import *
 
 
-def fit_surrogate(problem_domain: str, ins_dir: str = '../data/problem_instance', ins_type: str = "train",
-                  dim: int = 30,
-                  index: int = 0, gpu_index: int = -1):
-    device = torch.device("cuda:{}".format(gpu_index)) if gpu_index >= 0 else torch.device("cpu")
-    with open("../configs/surrogate.yaml", 'r') as file:
+def fit_surrogate(problem_domain: str, ins_dir: Union[Path, str] = '../../data/problem_instance',
+                  ins_type: str = "train", dim: int = 30, index: int = 0):
+    device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+    with open(Path(os.path.dirname(os.path.realpath(__file__)), "../../configs/surrogate.yaml"), 'r') as file:
         config = yaml.safe_load(file)
     problem_path = Path(ins_dir, ins_type, f"{problem_domain}_{dim}_{index}")
     problem_instance: BaseProblem = pickle.load(open(Path(problem_path, "problem.pkl"), 'rb'))
 
     config["model_params"]["in_dim"] = problem_instance.dimension
     config["model_params"]["latent_dim"] = problem_instance.dimension * config["model_params"]["latent_dim_coefficient"]
-    config["trainer_params"]["gpus"] = [gpu_index]
-    config["logging_params"]["name"] = "{}-{}".format(problem_domain, index)
+    # config["trainer_params"]["gpus"] = [0]
+    config["logging_params"]["name"] = f"{problem_domain}_{dim}_{index}"
     seed_everything(config['exp_params']['manual_seed'], True)
-    model = SurrogateVAE(**config["vae_params"]).to(device)
+    model = SurrogateVAE(**config["model_params"]).to(device)
 
     x, y = load_problem_data(problem_path)
     train_data = ZeroOneProblemData(x, y, 'train')
@@ -37,9 +34,8 @@ def fit_surrogate(problem_domain: str, ins_dir: str = '../data/problem_instance'
     valid_dataloader = DataLoader(valid_data, batch_size=config['data_params']['val_batch_size'], shuffle=True,
                                   num_workers=config['data_params']['num_workers'])
     log_path = Path(config['logging_params']['save_dir'], config["logging_params"]["name"])
-    if not os.path.exists(Path(config['logging_params']['save_dir'])):
-        os.makedirs(Path(config['logging_params']['save_dir']))
-    if not os.path.exists(log_path):
+    if os.path.exists(log_path):
+        shutil.rmtree(log_path)
         os.makedirs(log_path)
     writer = SummaryWriter(str(log_path))
     yaml.dump(config, open(Path(log_path, "HyperParam.yaml"), "w"))
@@ -47,9 +43,10 @@ def fit_surrogate(problem_domain: str, ins_dir: str = '../data/problem_instance'
                            lr=config['exp_params']['LR'],
                            weight_decay=config['exp_params']['weight_decay'])
     # writer.add_graph(model)
-    # epoch_bar = tqdm(range(int(config['trainer_params']['max_epochs'])))
     best_val_loss = np.inf
+    # epoch_bar = tqdm(range(int(config['trainer_params']['max_epochs'])))
     for epoch in range(int(config['trainer_params']['max_epochs'])):
+    # for epoch in epoch_bar:
         loss_records = {}
         for solution, quality in train_dataloader:
             optimizer.zero_grad()
@@ -75,7 +72,18 @@ def fit_surrogate(problem_domain: str, ins_dir: str = '../data/problem_instance'
             writer.add_scalar(key, np.mean(loss_records[key]), epoch)
 
         # epoch_bar.set_description("Epoch {}".format(epoch))
-        # epoch_bar.set_postfix_str("MSE {:.5f}".format(np.mean(loss_records['loss'])))
-    print("Finish the surrogate Task of {}_{}".format(problem_domain, index))
+        # epoch_bar.set_postfix_str("TOTAL LOSS {:.5f}".format(np.mean(loss_records['loss'])))
+    # print("Finish the surrogate Task of {}_{}".format(problem_domain, index))
+    return (config, open(Path(log_path, "best_model.pt"), "rb").read())
 
 
+if __name__ == '__main__':
+    torch.cuda.set_device(1)
+    work_dir = Path(os.path.dirname(os.path.realpath(__file__)), "../../data/problem_instance")
+    fit_surrogate(
+        problem_domain="zero_one_knapsack_problem",
+        ins_dir=work_dir,
+        ins_type="train",
+        dim=40,
+        index=0
+    )

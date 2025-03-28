@@ -2,7 +2,6 @@ import os
 import pickle
 import time
 from multiprocessing import Manager, Process, Queue, Lock
-from pathlib import Path
 
 import logzero
 import requests
@@ -11,14 +10,17 @@ import urllib3
 from src.types_ import *
 
 urllib3.disable_warnings(category=urllib3.exceptions.InsecureRequestWarning)
-from src.eval_func import eval_problem_solutions
+from src.eval_func import eval_problem_solutions, fit_surrogate
 
 eval_funcs = {
-    "eval_problem_solutions": eval_problem_solutions
+    "eval_problem_solutions": eval_problem_solutions,
+    "eval_surrogate_training": fit_surrogate
 }
 
 
-def eval_worker(up_queue, result_queue):
+def eval_worker(up_queue, result_queue, gpu_index: int = None):
+    if gpu_index is not None:
+        torch.cuda.set_device(gpu_index)
     while True:
         task_info = up_queue.get()
         task_id = task_info["task_id"]
@@ -33,7 +35,7 @@ def eval_worker(up_queue, result_queue):
 
 
 class DistributedEvaluator:
-    def __init__(self, master_host="10.16.104.19:1088", task_capacity=512, task_type="cpu"):
+    def __init__(self, master_host="10.16.104.19:1088", task_capacity=512, task_type="cpu", gpu_list: List[int] = None):
         if not os.path.exists(Path(os.path.dirname(os.path.abspath(__file__)), "../../logs/Distribution_logs")):
             os.makedirs(Path(os.path.dirname(os.path.abspath(__file__)), "../../logs/Distribution_logs"))
         self.logger = logzero.setup_logger(
@@ -44,13 +46,25 @@ class DistributedEvaluator:
         self.task_capacity = task_capacity
         self.task_lock = Lock()
         self.task_type = task_type
+        self.gpu_list = gpu_list
         self.manager = Manager()
         self.up_queue = Queue()
         self.result_queue = Queue()
         self.eval_processes = []
         self.task_ongoing: Dict = self.manager.dict()
         for p_num in range(self.task_capacity):
-            p = Process(target=eval_worker, args=(self.up_queue, self.result_queue))
+            if self.task_type == "cpu":
+                p = Process(target=eval_worker, args=(self.up_queue, self.result_queue))
+            elif self.task_type == "gpu":
+                if self.gpu_list is None or len(self.gpu_list) == 0:
+                    gpu_index = None
+                else:
+                    gpu_index = self.gpu_list[p_num % len(self.gpu_list)]
+                print(f"Create Task on GPU {gpu_index}")
+                p = Process(target=eval_worker, args=(self.up_queue, self.result_queue, gpu_index))
+            else:
+                print("ERROR TASK TYPE")
+                break
             p.start()
             self.eval_processes.append(p)
         self.task_process = Process(target=self.eval_new_task, args=())
@@ -123,9 +137,11 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--master_host', type=str, default="10.16.104.19:1088", help='The Host of the Master')
     parser.add_argument('--task_capacity', type=int, default=128, help='The Host of the Master')
-    parser.add_argument('--task_type', type=str, default="cpu", help='The Host of the Master')
+    parser.add_argument('--task_type', type=str, default="cpu", help='The Task Type of Evaluator')
+    parser.add_argument('--gpu_list', nargs='+', type=int, default=[], help="The GPU List used by Evaluator")
     args = parser.parse_args()
+    print(args.task_type, args.gpu_list)
     evaluator = DistributedEvaluator(master_host=args.master_host, task_capacity=args.task_capacity,
-                                     task_type=args.task_type)
+                                     task_type=args.task_type, gpu_list=args.gpu_list)
     while True:
         time.sleep(100)

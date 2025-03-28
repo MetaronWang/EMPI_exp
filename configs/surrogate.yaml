@@ -1,17 +1,12 @@
-vae_params:
+model_params:
   name: 'SurrogateVAE'
-  in_dim: 80
+  in_dim: 10
   latent_dim_coefficient: 1
-  encoder_dims: [ 128, 128 ]
-  decoder_dims: [ 128, 128 ]
   hidden_dims: [ 128, 128 ]
-  ins_emb_dim_coefficient: 1
-  scorer_generator_mid_dim: 64
-
-loss_params:
+  mlp_dims: [ 256, 512, 256 ]
   lamBDa: 1
-  gamma: 0.0005
-
+  gamma: 0.0025
+  margin: 4
 
 data_params:
   data_path: "data/"
@@ -26,9 +21,9 @@ exp_params:
 
 trainer_params:
   gpus: [ 1 ]
-  max_epochs: 5000
+  max_epochs: 50000
 
 logging_params:
-  save_dir: "../../logs/surrogate_logs"
+  save_dir: "/home/metaron/EMPI_exp/logs/surrogate_train_logs"
   manual_seed: 2333
   name: 'SurrogateVAE'
