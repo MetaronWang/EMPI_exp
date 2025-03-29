@@ -163,3 +163,4 @@ cython_debug/
 /configs/python_cmd
 /src/test.py
 /logs/*
+/out/*

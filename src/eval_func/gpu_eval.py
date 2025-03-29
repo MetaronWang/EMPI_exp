@@ -20,10 +20,10 @@ def fit_surrogate(problem_domain: str, ins_dir: Union[Path, str] = '../../data/p
     problem_instance: BaseProblem = pickle.load(open(Path(problem_path, "problem.pkl"), 'rb'))
 
     config["model_params"]["in_dim"] = problem_instance.dimension
-    config["model_params"]["latent_dim"] = problem_instance.dimension * config["model_params"]["latent_dim_coefficient"]
+    # config["model_params"]["latent_dim"] = problem_instance.dimension * config["model_params"]["latent_dim_coefficient"]
     # config["trainer_params"]["gpus"] = [0]
     config["logging_params"]["name"] = f"{problem_domain}_{dim}_{index}"
-    seed_everything(config['exp_params']['manual_seed'], True)
+    seed_everything(config['exp_params']['manual_seed'], True, verbose=False)
     model = SurrogateVAE(**config["model_params"]).to(device)
 
     x, y = load_problem_data(problem_path)

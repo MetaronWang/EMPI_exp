@@ -83,7 +83,7 @@ class SurrogateVAE(nn.Module):
         modules.append(
             nn.Sequential(
                 nn.Linear(mlp_dims[-1], 1),
-                nn.ReLU(),
+                nn.LeakyReLU(),
                 nn.Flatten(start_dim=0)
             )
         )

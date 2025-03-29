@@ -2,6 +2,7 @@ model_params:
   name: 'SurrogateVAE'
   in_dim: 10
   latent_dim_coefficient: 1
+  latent_dim: 128
   hidden_dims: [ 128, 128 ]
   mlp_dims: [ 256, 512, 256 ]
   lamBDa: 1
@@ -25,5 +26,5 @@ trainer_params:
 
 logging_params:
   save_dir: "/home/metaron/EMPI_exp/logs/surrogate_train_logs"
-  manual_seed: 2333
+  manual_seed: 1088
   name: 'SurrogateVAE'
